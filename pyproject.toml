@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dpend"
+version = "0.0.1"
+description = "2-D double pendulum simulation and balancing controllers (practice tool)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.0",  # np.trapezoid requires >=2.0; np.trapz removed
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+# QP solver for linear MPC. Choice (osqp vs cvxpy) is finalized in the MPC design.
+mpc = ["osqp>=0.6"]
+# Tests + symbolic cross-check of the hand-derived dynamics + MPC test-only
+# oracles (cvxpy: a declarative formulation oracle for tests/test_mpc.py —
+# never imported inside dpend/; see controllers/mpc.py's hand-roll-line note).
+dev = ["pytest>=7", "sympy>=1.12", "cvxpy>=1.4", "import-linter>=2.0"]
+# Live interactive UI (pygame window).
+ui = ["pygame>=2.5"]
+
+[tool.setuptools.packages.find]
+include = ["dpend*"]
+
+# Dependency-DAG contracts (docs/ARCHITECTURE.md "Dependency rules (acyclic)"),
+# enforced by `lint-imports` via tests/test_architecture.py. ui.py/batch.py/
+# scenarios/ live outside the dpend root and are covered by review, not lint.
+[tool.importlinter]
+root_packages = ["dpend"]
+
+[[tool.importlinter.contracts]]
+name = "algorithms are hardware-portable: controllers/estimation/sensors never import runtime"
+type = "forbidden"
+source_modules = ["dpend.controllers", "dpend.estimation", "dpend.sensors"]
+forbidden_modules = ["dpend.sim", "dpend.telemetry", "dpend.viz", "dpend.interactive", "dpend.registry", "dpend.config"]
+
+[[tool.importlinter.contracts]]
+name = "model is core: may import util only"
+type = "forbidden"
+source_modules = ["dpend.model"]
+forbidden_modules = ["dpend.sim", "dpend.controllers", "dpend.estimation", "dpend.sensors", "dpend.telemetry", "dpend.viz", "dpend.interactive", "dpend.registry", "dpend.config", "dpend.reference"]
+
+[[tool.importlinter.contracts]]
+name = "util and reference are leaves: no internal imports"
+type = "forbidden"
+source_modules = ["dpend.util", "dpend.reference"]
+forbidden_modules = ["dpend.model", "dpend.sim", "dpend.controllers", "dpend.estimation", "dpend.sensors", "dpend.telemetry", "dpend.viz", "dpend.interactive", "dpend.registry", "dpend.config"]
+
+[[tool.importlinter.contracts]]
+name = "interactive is a leaf consumer: nothing in dpend imports it"
+type = "forbidden"
+source_modules = ["dpend.model", "dpend.sim", "dpend.controllers", "dpend.estimation", "dpend.sensors", "dpend.telemetry", "dpend.viz", "dpend.util", "dpend.registry", "dpend.config", "dpend.reference"]
+forbidden_modules = ["dpend.interactive"]
+
+[[tool.importlinter.contracts]]
+name = "sim orchestrates but never renders or self-wires"
+type = "forbidden"
+source_modules = ["dpend.sim"]
+forbidden_modules = ["dpend.viz", "dpend.registry", "dpend.config"]
+
+[[tool.importlinter.contracts]]
+name = "viz reads telemetry only"
+type = "forbidden"
+source_modules = ["dpend.viz"]
+forbidden_modules = ["dpend.model", "dpend.sim", "dpend.controllers", "dpend.estimation", "dpend.sensors", "dpend.registry", "dpend.config", "dpend.reference"]
+
+[[tool.importlinter.contracts]]
+name = "telemetry is the sim/viz contract: may import util only"
+type = "forbidden"
+source_modules = ["dpend.telemetry"]
+forbidden_modules = ["dpend.model", "dpend.sim", "dpend.controllers", "dpend.estimation", "dpend.sensors", "dpend.viz", "dpend.registry", "dpend.config", "dpend.reference"]
+
+[[tool.importlinter.contracts]]
+name = "config is a passive dataclass: may import reference only"
+type = "forbidden"
+source_modules = ["dpend.config"]
+forbidden_modules = ["dpend.model", "dpend.sim", "dpend.controllers", "dpend.estimation", "dpend.sensors", "dpend.telemetry", "dpend.viz", "dpend.interactive", "dpend.registry"]

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# run — one front door for the project. Bare invocation opens the UI.
+set -euo pipefail
+cd "$(dirname "$0")"
+COMPOSE="docker compose"; SVC="dev"
+
+_emit() { if [[ "${RUN_DRY_RUN:-}" == "1" ]]; then echo "DRYRUN: $*"; else exec "$@"; fi; }
+_ensure_env()   { [[ "${RUN_DRY_RUN:-}" == "1" ]] && return 0; printf 'UID=%s\nGID=%s\n' "$(id -u)" "$(id -g)" > .env; }
+_ensure_built() { [[ "${RUN_DRY_RUN:-}" == "1" ]] && return 0; docker image inspect dpend-dev >/dev/null 2>&1 || $COMPOSE build; }
+_xhost()        { [[ "${RUN_DRY_RUN:-}" == "1" ]] && return 0; command -v xhost >/dev/null 2>&1 && xhost +si:localuser:"$(id -un)" >/dev/null 2>&1 || true; }
+_usage() {
+  cat <<'EOF'
+usage: ./run [command] [args]
+  (no command)          open the UI (default)
+  ui   [flags]          open the UI (e.g. --plant cartpole --controller swingup --start hanging)
+  batch <scenario> ...  batch scenario (batch.py)
+  test [pytest args]    run the test suite
+  build                 rebuild the docker image
+  shell                 bash shell in the container
+  help                  this text
+EOF
+}
+
+first="${1:-}"
+case "$first" in
+  "" | -* )                          cmd="ui" ;;
+  ui|batch|test|build|shell|help )   cmd="$first"; shift ;;
+  * )                                [[ "${RUN_DRY_RUN:-}" == "1" ]] && echo "DRYRUN: unknown command: $first" || echo "unknown command: $first"; _usage; exit 0 ;;
+esac
+
+case "$cmd" in
+  ui)    _ensure_env; _ensure_built; _xhost; _emit $COMPOSE run --rm "$SVC" python ui.py "$@" ;;
+  batch) _ensure_env; _ensure_built;         _emit $COMPOSE run --rm "$SVC" python batch.py "$@" ;;
+  test)  _ensure_env; _ensure_built;         _emit $COMPOSE run --rm "$SVC" pytest "$@" ;;
+  shell) _ensure_env; _ensure_built; _xhost; _emit $COMPOSE run --rm "$SVC" bash ;;
+  build) [[ "${RUN_DRY_RUN:-}" == "1" ]] && echo "DRYRUN: $COMPOSE build" || $COMPOSE build ;;
+  help)  _usage ;;
+esac

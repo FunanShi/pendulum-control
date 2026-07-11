@@ -1,0 +1,22 @@
+services:
+  dev:
+    build: .
+    image: dpend-dev
+    init: true                        # PID-1 init: forwards SIGINT to the app, reaps zombies
+    user: "${UID:-1000}:${GID:-1000}" # host uid (.env) -> files written to /work owned by the user;
+                                      # also satisfies the `xhost +si:localuser` grant via peer creds
+    volumes:
+      # INVARIANT: target must equal the Dockerfile WORKDIR (/work) — see Dockerfile comment.
+      - .:/work
+      # Host X socket: draw requests out, mouse/keyboard events back in.
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      DISPLAY: ${DISPLAY:-:0}
+      # Container user has no $HOME: give matplotlib AND fontconfig writable,
+      # persistent cache dirs on the mount (else: re-scan every run + stderr noise).
+      MPLCONFIGDIR: /work/.cache/matplotlib
+      XDG_CACHE_HOME: /work/.cache      # fontconfig uses $XDG_CACHE_HOME/fontconfig
+      SDL_AUDIODRIVER: dummy            # container has no sound device; silences SDL
+    # Escape hatch for X shared-memory toolkits (Qt/pygame): symptom is
+    # BadAccess / shm errors from the GUI. TkAgg does not need it.
+    # ipc: host
